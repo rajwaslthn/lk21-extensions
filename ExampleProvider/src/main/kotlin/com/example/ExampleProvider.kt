@@ -2,7 +2,6 @@ package com.example
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Document
 
 class LK21Provider : MainAPI() {
     override var mainUrl = "https://tv3.lk21online.mom"
@@ -23,8 +22,8 @@ class LK21Provider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         val doc = app.get(request.data).document
-        val items = doc.select("article.item").map { el ->
-            val title = el.select("h2, h3, .Title").text()
+        val items = doc.select("li.slider, li.listitem").map { el ->
+            val title = el.select("figcaption").text()
             val href = el.select("a").attr("href")
             val poster = el.select("img").attr("src")
             newMovieSearchResponse(title, href, TvType.Movie) {
@@ -36,8 +35,8 @@ class LK21Provider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val doc = app.get("$mainUrl/?s=$query").document
-        return doc.select("article.item").map { el ->
-            val title = el.select("h2, h3, .Title").text()
+        return doc.select("li.slider, li.listitem").map { el ->
+            val title = el.select("figcaption").text()
             val href = el.select("a").attr("href")
             val poster = el.select("img").attr("src")
             newMovieSearchResponse(title, href, TvType.Movie) {
@@ -48,9 +47,9 @@ class LK21Provider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url).document
-        val title = doc.select("h1, .Title").first()?.text() ?: ""
-        val poster = doc.select("img.Poster, .Image img").attr("src")
-        val desc = doc.select(".Description, .sinopsis").text()
+        val title = doc.select("h1.entry-title, h1").first()?.text() ?: ""
+        val poster = doc.select("div.poster img, figure img").attr("src")
+        val desc = doc.select("div.entry-content p, .sinopsis").text()
 
         return newMovieLoadResponse(title, url, TvType.Movie, url) {
             this.posterUrl = poster
