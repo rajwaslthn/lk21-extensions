@@ -1,0 +1,23 @@
+[
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=lk21online.mom&sz=256",
+        "fileHash": "sha256-8b05d0bec9598a5c97b10b596b8ce7e2a61892fe6cdc277d2a709dc4a5c0bcc3",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/rajwaslthn/lk21-extensions",
+        "fileSize": 19037,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "rajwaslthn"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "ExampleProvider",
+        "description": "Nonton film Indonesia di LK21",
+        "url": "https://raw.githubusercontent.com/rajwaslthn/lk21-extensions/builds/ExampleProvider.cs3",
+        "name": "ExampleProvider"
+    }
+]

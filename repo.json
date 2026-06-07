@@ -1,0 +1,8 @@
+{
+    "name": "LK21 Indonesia",
+    "description": "Extension LK21 untuk CloudStream",
+    "manifestVersion": 1,
+    "pluginLists": [
+        "https://raw.githubusercontent.com/rajwaslthn/lk21-extensions/builds/plugins.json"
+    ]
+}
