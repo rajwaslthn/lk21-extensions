@@ -86,8 +86,8 @@ class LK21Provider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val doc = app.get(data).document
-        doc.select("iframe#main-player, iframe[src*=playeriframe], iframe[src*=iframe]").forEach { iframe ->
-            val src = iframe.attr("src")
+        doc.select("iframe").forEach { iframe ->
+            val src = iframe.attr("src").ifEmpty { iframe.attr("data-src") }
             if (src.isNotEmpty()) {
                 loadExtractor(src, data, subtitleCallback, callback)
             }
