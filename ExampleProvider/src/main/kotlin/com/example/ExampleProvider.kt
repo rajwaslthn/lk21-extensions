@@ -98,36 +98,29 @@ class LK21Provider : MainAPI() {
     ): Boolean {
         val doc = app.get(data).document
 
-        // Ambil semua player dari player-list
-        doc.select("ul#player-list li a").forEach { player ->
-            val playerUrl = player.attr("data-url").ifEmpty { player.attr("href") }
-            if (playerUrl.isNotEmpty()) {
-                // Fetch halaman player untuk dapat M3U8
-                try {
-                    val playerDoc = app.get(
-                        playerUrl,
-                        referer = mainUrl
-                    ).document
+        val playerUrl = doc.select("ul#player-list li a")
+            .firstOrNull()?.attr("data-url") ?: return false
 
-                    // Cari M3U8 di source player
-                    val m3u8 = Regex("(https?://[^\"']+\\.m3u8[^\"']*)").find(playerDoc.html())
-                        ?.groupValues?.get(1)
+        val playerDoc = app.get(
+            playerUrl,
+            headers = mapOf(
+                "Referer" to "$mainUrl/",
+                "Origin" to mainUrl,
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36"
+            )
+        ).document
 
-                    if (m3u8 != null) {
-                        callback(newExtractorLink(
-                            name, name, m3u8,
-                            type = ExtractorLinkType.M3U8
-                        ) {
-                            this.referer = playerUrl
-                            this.quality = 0
-                        })
-                    } else {
-                        loadExtractor(playerUrl, mainUrl, subtitleCallback, callback)
-                    }
-                } catch (e: Exception) {
-                    loadExtractor(playerUrl, mainUrl, subtitleCallback, callback)
-                }
-            }
+        val m3u8 = Regex("file:\\s*[\"'](https?://[^\"']+\\.m3u8[^\"']*)[\"']")
+            .find(playerDoc.html())?.groupValues?.get(1)
+
+        if (m3u8 != null) {
+            callback(newExtractorLink(
+                name, name, m3u8,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = playerUrl
+                this.quality = 0
+            })
         }
         return true
     }
