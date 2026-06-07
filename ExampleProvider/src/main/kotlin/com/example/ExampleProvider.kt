@@ -22,10 +22,12 @@ class LK21Provider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         val doc = app.get(request.data).document
-        val items = doc.select("li.slider, li.listitem").map { el ->
-            val title = el.select("figcaption").text()
+        val items = doc.select("li.slider, li.listitem").mapNotNull { el ->
+            val title = el.select("h3.poster-title").text().ifEmpty { el.select("figcaption").text() }
             val href = el.select("a").attr("href")
-            val poster = el.select("img").attr("src")
+            val poster = el.select("img[itemprop=image]").attr("src")
+                .ifEmpty { el.select("img").attr("src") }
+            if (title.isEmpty() || href.isEmpty()) return@mapNotNull null
             newMovieSearchResponse(title, href, TvType.Movie) {
                 this.posterUrl = poster
             }
@@ -35,10 +37,12 @@ class LK21Provider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val doc = app.get("$mainUrl/?s=$query").document
-        return doc.select("li.slider, li.listitem").map { el ->
-            val title = el.select("figcaption").text()
+        return doc.select("li.slider, li.listitem").mapNotNull { el ->
+            val title = el.select("h3.poster-title").text().ifEmpty { el.select("figcaption").text() }
             val href = el.select("a").attr("href")
-            val poster = el.select("img").attr("src")
+            val poster = el.select("img[itemprop=image]").attr("src")
+                .ifEmpty { el.select("img").attr("src") }
+            if (title.isEmpty() || href.isEmpty()) return@mapNotNull null
             newMovieSearchResponse(title, href, TvType.Movie) {
                 this.posterUrl = poster
             }
@@ -47,13 +51,31 @@ class LK21Provider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url).document
-        val title = doc.select("h1.entry-title, h1").first()?.text() ?: ""
-        val poster = doc.select("div.poster img, figure img").attr("src")
-        val desc = doc.select("div.entry-content p, .sinopsis").text()
+        val title = doc.select("h1.Nonton, div.movie-info h1").text()
+        val poster = doc.select("img[itemprop=image]").attr("src")
+        val desc = doc.select("div.synopsis p").text()
+        val isSeries = doc.select("ul.episode-list li").isNotEmpty()
 
-        return newMovieLoadResponse(title, url, TvType.Movie, url) {
-            this.posterUrl = poster
-            this.plot = desc
+        return if (isSeries) {
+            val episodes = doc.select("ul.episode-list li a").mapNotNull { ep ->
+                val epHref = ep.attr("href")
+                val epName = ep.text()
+                if (epHref.isEmpty()) return@mapNotNull null
+                val epNum = Regex("(\\d+)").find(epName)?.value?.toIntOrNull()
+                newEpisode(epHref) {
+                    name = epName
+                    episode = epNum
+                }
+            }.reversed()
+            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+                this.posterUrl = poster
+                this.plot = desc
+            }
+        } else {
+            newMovieLoadResponse(title, url, TvType.Movie, url) {
+                this.posterUrl = poster
+                this.plot = desc
+            }
         }
     }
 
@@ -64,8 +86,6 @@ class LK21Provider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val doc = app.get(data).document
-
-        // Cari semua iframe player
         doc.select("iframe#main-player, iframe[src*=playeriframe], iframe[src*=iframe]").forEach { iframe ->
             val src = iframe.attr("src")
             if (src.isNotEmpty()) {
