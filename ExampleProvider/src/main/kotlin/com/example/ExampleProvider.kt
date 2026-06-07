@@ -2,6 +2,7 @@ package com.example
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import com.fasterxml.jackson.annotation.JsonProperty
 
 class LK21Provider : MainAPI() {
     override var mainUrl = "https://tv3.lk21online.mom"
@@ -17,18 +18,14 @@ class LK21Provider : MainAPI() {
         "$mainUrl/genre/drama/" to "Drama",
     )
 
-    override suspend fun getMainPage(
-        page: Int,
-        request: MainPageRequest
-    ): HomePageResponse {
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val doc = app.get(request.data).document
         val items = doc.select("li.slider, li.listitem").mapNotNull { el ->
             val title = el.select("h3.poster-title").text().ifEmpty { el.select("figcaption").text() }
             val href = el.select("a").attr("href")
-            val poster = el.select("img[itemprop=image]").attr("src")
-                .ifEmpty { el.select("img").attr("src") }
+            val poster = el.select("img").attr("data-src").ifEmpty { el.select("img").attr("src") }
             if (title.isEmpty() || href.isEmpty()) return@mapNotNull null
-            newMovieSearchResponse(title, href, TvType.Movie) {
+            newMovieSearchResponse(title, fixUrl(href), TvType.Movie) {
                 this.posterUrl = poster
             }
         }
@@ -36,37 +33,51 @@ class LK21Provider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val doc = app.get("$mainUrl/?s=$query").document
+        val doc = app.get("$mainUrl/search/?s=$query").document
         return doc.select("li.slider, li.listitem").mapNotNull { el ->
             val title = el.select("h3.poster-title").text().ifEmpty { el.select("figcaption").text() }
             val href = el.select("a").attr("href")
-            val poster = el.select("img[itemprop=image]").attr("src")
-                .ifEmpty { el.select("img").attr("src") }
+            val poster = el.select("img").attr("data-src").ifEmpty { el.select("img").attr("src") }
             if (title.isEmpty() || href.isEmpty()) return@mapNotNull null
-            newMovieSearchResponse(title, href, TvType.Movie) {
+            newMovieSearchResponse(title, fixUrl(href), TvType.Movie) {
                 this.posterUrl = poster
             }
         }
     }
 
+    data class EpisodeData(
+        @JsonProperty("s") val season: Int,
+        @JsonProperty("episode_no") val episodeNo: Int,
+        @JsonProperty("title") val title: String,
+        @JsonProperty("slug") val slug: String
+    )
+
     override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url).document
-        val title = doc.select("h1.Nonton, div.movie-info h1").text()
-        val poster = doc.select("img[itemprop=image]").attr("src")
-        val desc = doc.select("div.synopsis p").text()
-        val isSeries = doc.select("ul.episode-list li").isNotEmpty()
+        val title = doc.select("h1").first()?.text() ?: ""
+        val poster = doc.select("img[itemprop=image]").attr("data-src")
+            .ifEmpty { doc.select("img[itemprop=image]").attr("src") }
+        val desc = doc.select("div.synopsis").text()
 
-        return if (isSeries) {
-            val episodes = doc.select("ul.episode-list li a").mapNotNull { ep ->
-                val epHref = ep.attr("href")
-                val epName = ep.text()
-                if (epHref.isEmpty()) return@mapNotNull null
-                val epNum = Regex("(\\d+)").find(epName)?.value?.toIntOrNull()
-                newEpisode(epHref) {
-                    name = epName
-                    episode = epNum
+        // Cek season-data JSON
+        val seasonDataRaw = doc.select("script#season-data").html()
+
+        return if (seasonDataRaw.isNotEmpty()) {
+            // Ini series — parse episode dari JSON
+            val episodes = mutableListOf<Episode>()
+            try {
+                val seasonMap = AppUtils.parseJson<Map<String, List<EpisodeData>>>(seasonDataRaw)
+                seasonMap.forEach { (_, epList) ->
+                    epList.forEach { ep ->
+                        episodes.add(newEpisode("$mainUrl/${ep.slug}") {
+                            name = ep.title
+                            season = ep.season
+                            episode = ep.episodeNo
+                        })
+                    }
                 }
-            }.reversed()
+            } catch (e: Exception) { }
+
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
                 this.plot = desc
@@ -87,22 +98,20 @@ class LK21Provider : MainAPI() {
     ): Boolean {
         val doc = app.get(data).document
 
-        val postId = Regex("\"post_id\":(\\d+)").find(doc.html())
-            ?.groupValues?.get(1) ?: ""
-
-        if (postId.isNotEmpty()) {
-            loadExtractor(
-                "https://playeriframe.sbs/iframe/cast/$postId",
-                data, subtitleCallback, callback
-            )
-        }
-
-        doc.select("iframe").forEach { iframe ->
-            val src = iframe.attr("src").ifEmpty { iframe.attr("data-src") }
-            if (src.isNotEmpty()) {
-                loadExtractor(src, data, subtitleCallback, callback)
+        // Ambil semua player dari player-list
+        doc.select("ul#player-list li a").forEach { player ->
+            val playerUrl = player.attr("data-url").ifEmpty { player.attr("href") }
+            if (playerUrl.isNotEmpty()) {
+                loadExtractor(playerUrl, data, subtitleCallback, callback)
             }
         }
+
+        // Fallback iframe utama
+        val mainIframe = doc.select("iframe#main-player").attr("src")
+        if (mainIframe.isNotEmpty()) {
+            loadExtractor(mainIframe, data, subtitleCallback, callback)
+        }
+
         return true
     }
 }
