@@ -87,21 +87,19 @@ class LK21Provider : MainAPI() {
     ): Boolean {
         val doc = app.get(data).document
 
-        // Ambil post ID dari halaman
-        val postId = doc.select("div[data-post]").attr("data-post")
-            .ifEmpty {
-                Regex("\"post_id\":(\\d+)").find(doc.html())?.groupValues?.get(1) ?: ""
-            }
+        val postId = Regex("\"post_id\":(\\d+)").find(doc.html())
+            ?.groupValues?.get(1) ?: ""
 
         if (postId.isNotEmpty()) {
-            val playerUrl = "https://playeriframe.sbs/iframe/cast/$postId"
-            loadExtractor(playerUrl, data, subtitleCallback, callback)
+            loadExtractor(
+                "https://playeriframe.sbs/iframe/cast/$postId",
+                data, subtitleCallback, callback
+            )
         }
 
-        // Fallback cari iframe biasa
         doc.select("iframe").forEach { iframe ->
             val src = iframe.attr("src").ifEmpty { iframe.attr("data-src") }
-            if (src.isNotEmpty() && src.contains("playeriframe")) {
+            if (src.isNotEmpty()) {
                 loadExtractor(src, data, subtitleCallback, callback)
             }
         }
